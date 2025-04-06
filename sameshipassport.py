@@ -7,6 +7,12 @@ from typing import List, Dict  # これを追加
 import time
 import base64
 
+st.set_page_config(
+    page_title="サ飯パスポート", 
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
+
 # --- 認証 ---
 scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
 creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
@@ -15,8 +21,9 @@ creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', sco
 SHEET_ID = "1c1WDtrWXvDyTVis_1wzyVzkWf2Hq7SxRKuGkrdN3K4M"
 
 
-def load_sheet_as_df(sheet_id: str, sheet_name: str, creds) -> pd.DataFrame:
-    client = gspread.authorize(creds)
+@st.cache_data
+def load_sheet_as_df(sheet_id: str, sheet_name: str, _creds) -> pd.DataFrame:
+    client = gspread.authorize(_creds)
     sheet = client.open_by_key(sheet_id).worksheet(sheet_name)
     records = sheet.get_all_records()
     df = pd.DataFrame(records)
@@ -54,13 +61,6 @@ def get_all_menu_items_for_sauna(sauna_id: int) -> List[Dict]:
     return all_menus
 
 # ------------------ Streamlit UI ------------------
-
-st.set_page_config(
-    page_title="サ飯パスポート", 
-    layout="centered",
-    initial_sidebar_state="collapsed"
-)
-
 # ロゴ（同フォルダ内の画像をbase64化）
 with open("sameshi_logo.png", "rb") as f:
     logo_data = f.read()
@@ -140,8 +140,13 @@ st.markdown(f"""
         color: #e8d0a9;
         border: 1px solid #e8d0a9;
         border-radius: 0;
-        padding: 4px;
+        padding: 12px 14px;
         font-size: 17px;
+        line-height: 1.8;
+        height: auto !important;
+        overflow: visible !important;
+        display: flex;
+        align-items: center;
     }}
 
     /* ボタン(角丸なし、中央配置はHTML側でdiv包む) */
@@ -290,9 +295,9 @@ st.markdown('<div style="text-align:center;">', unsafe_allow_html=True)
 if st.button("ガチャを回す"):
     with st.spinner("サ飯を選定中..."):
         time.sleep(1.5)
-    candidate_menus = get_all_menu_items_for_sauna(st.session_state.selected_sauna_id)
-    if candidate_menus:
-        st.session_state.selected_menus = random.sample(candidate_menus, k=min(3, len(candidate_menus)))
+        candidate_menus = get_all_menu_items_for_sauna(st.session_state.selected_sauna_id)
+        if candidate_menus:
+            st.session_state.selected_menus = random.sample(candidate_menus, k=min(3, len(candidate_menus)))
 st.markdown('</div>', unsafe_allow_html=True)
 
 # 結果表示
