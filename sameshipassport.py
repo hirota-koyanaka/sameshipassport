@@ -3,65 +3,62 @@ import random
 from typing import List, Dict
 import time
 import base64
+import pandas as pd
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
-# ------------------ モックデータ ------------------
 
-saunas = [
-    {"id": 1, "name": "サウナ富士山", "location": "静岡県富士市", "open_hours": "10:00〜23:00", "description": "富士山が見える絶景サウナ", "image_url": "https://example.com/fuji-sauna.jpg", "entry_fee": 1200},
-    {"id": 2, "name": "渋谷リラックスサウナ", "location": "東京都渋谷区", "open_hours": "24時間営業", "description": "渋谷駅徒歩5分、都会のオアシス", "image_url": "https://example.com/shibuya-sauna.jpg", "entry_fee": 1500},
-    {"id": 3, "name": "札幌雪サウナ", "location": "北海道札幌市", "open_hours": "9:00〜22:00", "description": "雪景色を眺めながらととのえるサウナ", "image_url": "https://example.com/snow-sauna.jpg", "entry_fee": 1000}
-]
+# --- 認証 ---
+scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
+creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
 
-restaurants = [
-    {"id": 1, "name": "ととのい食堂", "type": "inside", "location": "施設内", "description": "サウナ後にぴったりのメニューを提供", "sauna_id": 1},
-    {"id": 2, "name": "富士ラーメン", "type": "nearby", "location": "徒歩3分", "description": "ガッツリ系ラーメン店", "sauna_id": 1},
-    {"id": 3, "name": "サ飯カフェ", "type": "inside", "location": "施設内2階", "description": "女性に人気のヘルシーカフェ", "sauna_id": 2},
-    {"id": 4, "name": "渋谷ステーキ", "type": "nearby", "location": "徒歩5分", "description": "がっつり肉が食べたい人に", "sauna_id": 2},
-    {"id": 5, "name": "雪見亭", "type": "inside", "location": "施設内", "description": "冷たい料理でととのう", "sauna_id": 3}
-]
+# --- 共通読み込み関数 ---
+def load_sheet_as_df(sheet_id: str, sheet_name: str, creds) -> pd.DataFrame:
+    client = gspread.authorize(creds)
+    sheet = client.open_by_key(sheet_id).worksheet(sheet_name)
+    records = sheet.get_all_records()
+    return pd.DataFrame(records)
 
-menu_items = [
-    {"id": 1, "name": "冷やしトマト", "price": 300, "description": "さっぱり冷たく、ととのいの味方", "image_url": "https://example.com/tomato.jpg", "restaurant_id": 1},
-    {"id": 2, "name": "塩ラーメン", "price": 800, "description": "風呂上がりの塩分補給に最高", "image_url": "https://example.com/ramen.jpg", "restaurant_id": 2},
-    {"id": 3, "name": "冷製パスタ", "price": 900, "description": "暑い日でもツルッと食べられる一品", "image_url": "https://example.com/pasta.jpg", "restaurant_id": 3},
-    {"id": 4, "name": "ステーキ定食", "price": 1500, "description": "サウナ後にエネルギーチャージ！", "image_url": "https://example.com/steak.jpg", "restaurant_id": 4},
-    {"id": 5, "name": "冷やしそば", "price": 700, "description": "雪サウナにぴったりの冷やし系", "image_url": "https://example.com/soba.jpg", "restaurant_id": 5}
-]
+# --- スプレッドシートID ---
+SHEET_ID = "1c1WDtrWXvDyTVis_1wzyVzkWf2Hq7SxRKuGkrdN3K4M"
 
-tags = [
-    {"id": 1, "name": "さっぱり"},
-    {"id": 2, "name": "ガッツリ"},
-    {"id": 3, "name": "冷たい"}
-]
+# --- 各シートを読み込む ---
+saunas_df = load_sheet_as_df(SHEET_ID, "Saunas", creds)
+restaurants_df = load_sheet_as_df(SHEET_ID, "Restaurants", creds)
+menu_items_df = load_sheet_as_df(SHEET_ID, "Menu", creds)
+tags_df = load_sheet_as_df(SHEET_ID, "MenuTags", creds)
+menu_item_tags_df = load_sheet_as_df(SHEET_ID, "MenuTagRelation", creds)
 
-menu_item_tags = [
-    {"id": 1, "menu_item_id": 1, "tag_id": 1},
-    {"id": 2, "menu_item_id": 1, "tag_id": 3},
-    {"id": 3, "menu_item_id": 2, "tag_id": 2},
-    {"id": 4, "menu_item_id": 3, "tag_id": 1},
-    {"id": 5, "menu_item_id": 3, "tag_id": 3},
-    {"id": 6, "menu_item_id": 4, "tag_id": 2},
-    {"id": 7, "menu_item_id": 5, "tag_id": 1},
-    {"id": 8, "menu_item_id": 5, "tag_id": 3}
-]
+
+# --- カラム名を小文字に統一（安全処理） ---
+for df in [saunas_df, restaurants_df, menu_items_df, tags_df, menu_item_tags_df]:
+    df.columns = df.columns.astype(str).str.strip().str.lower()
+
+# --- セッションステート初期化 ---
+if "selected_sauna_id" not in st.session_state:
+    st.session_state.selected_sauna_id = None
+if "selected_menus" not in st.session_state:
+    st.session_state.selected_menus = []
+
+
 
 # ------------------ ユーティリティ関数 ------------------
 
-def get_restaurants_by_sauna(sauna_id: int) -> List[Dict]:
-    return [r for r in restaurants if r["sauna_id"] == sauna_id]
+# def get_restaurants_by_sauna(sauna_id: int) -> List[Dict]:
+#     return [r for r in restaurants if r["sauna_id"] == sauna_id]
 
-def get_menu_items_by_restaurant(restaurant_id: int) -> List[Dict]:
-    return [m for m in menu_items if m["restaurant_id"] == restaurant_id]
+# def get_menu_items_by_restaurant(restaurant_id: int) -> List[Dict]:
+#     return [m for m in menu_items if m["restaurant_id"] == restaurant_id]
 
-def get_tags_for_menu_item(menu_item_id: int) -> List[str]:
-    tag_ids = [t["tag_id"] for t in menu_item_tags if t["menu_item_id"] == menu_item_id]
-    return [t["name"] for t in tags if t["id"] in tag_ids]
+# def get_tags_for_menu_item(menu_item_id: int) -> List[str]:
+#     tag_ids = [t["tag_id"] for t in menu_item_tags if t["menu_item_id"] == menu_item_id]
+#     return [t["name"] for t in tags if t["id"] in tag_ids]
 
-def get_all_menu_items_for_sauna(sauna_id: int) -> List[Dict]:
-    all_menus = []
-    for rest in get_restaurants_by_sauna(sauna_id):
-        all_menus.extend(get_menu_items_by_restaurant(rest["id"]))
-    return all_menus
+# def get_all_menu_items_for_sauna(sauna_id: int) -> List[Dict]:
+#     all_menus = []
+#     for rest in get_restaurants_by_sauna(sauna_id):
+#         all_menus.extend(get_menu_items_by_restaurant(rest["id"]))
+#     return all_menus
 
 # ------------------ Streamlit UI ------------------
 
