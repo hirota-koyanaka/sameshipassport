@@ -62,6 +62,23 @@ def get_all_menu_items_for_sauna(sauna_id: int) -> List[Dict]:
         all_menus.extend(get_menu_items_by_restaurant(rest["id"]))
     return all_menus
 
+def get_random_menus_by_category(menu_items: List[Dict]) -> List[Dict]:
+    selected = []
+
+    # main から1品
+    mains = [item for item in menu_items if item.get('category', '').strip().lower() == 'main']
+    if mains:
+        selected.append(random.choice(mains))
+
+    # drink から2品（重複しないように）
+    drinks = [item for item in menu_items if item.get('category', '').strip().lower() == 'drink']
+    if len(drinks) >= 2:
+        selected.extend(random.sample(drinks, 2))
+    elif drinks:
+        selected.extend(drinks)  # 1品しかない場合はその1品だけ
+
+    return selected
+
 # ------------------ Streamlit UI ------------------
 # ロゴ（同フォルダ内の画像をbase64化）
 with open("sameshi_logo.png", "rb") as f:
@@ -298,8 +315,7 @@ if st.button("ガチャを回す"):
     with st.spinner("サ飯を選定中..."):
         time.sleep(1.5)
         candidate_menus = get_all_menu_items_for_sauna(st.session_state.selected_sauna_id)
-        if candidate_menus:
-            st.session_state.selected_menus = random.sample(candidate_menus, k=min(3, len(candidate_menus)))
+        st.session_state.selected_menus = get_random_menus_by_category(candidate_menus)
 st.markdown('</div>', unsafe_allow_html=True)
 
 # 結果表示
@@ -344,7 +360,7 @@ if st.session_state.selected_menus:
     st.markdown('<div style="text-align:center;">', unsafe_allow_html=True)
     if st.button("もう一度ガチャを回す"):
         all_menus = get_all_menu_items_for_sauna(st.session_state.selected_sauna_id)
-        st.session_state.selected_menus = random.sample(all_menus, k=min(3, len(all_menus)))
+        st.session_state.selected_menus = get_random_menus_by_category(all_menus)
     st.markdown('</div>', unsafe_allow_html=True)
 
 # フッター
