@@ -7,6 +7,11 @@ import pandas as pd
 from typing import List, Dict  # これを追加
 import time
 import base64
+import googlemaps
+from dotenv import load_dotenv
+import pydeck as pdk
+load_dotenv()
+gmaps = googlemaps.Client(key=os.getenv("GOOGLE_API_KEY"))
 
 st.set_page_config(
     page_title="サ飯パスポート", 
@@ -20,6 +25,11 @@ creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', sco
 
 # --- シートID ---
 SHEET_ID = "1c1WDtrWXvDyTVis_1wzyVzkWf2Hq7SxRKuGkrdN3K4M"
+ 
+category_icon = {
+    "main": "🍽️",
+    "drink": "🍺"
+}
 
 
 @st.cache_data
@@ -46,6 +56,45 @@ tags = tags_df.to_dict(orient="records")
 menu_item_tags = menu_item_tags_df.to_dict(orient="records")
 
 # ------------------ ユーティリティ関数 ------------------
+import math
+
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371000
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lon2 - lon1)
+    a = math.sin(d_phi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(d_lambda/2)**2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+def find_nearby_good_food(lat, lng, radius=200):
+    keywords = ["ラーメン", "牛丼", "カレー", "ハンバーガー"]
+    found_places = []
+
+    for keyword in keywords:
+        results = gmaps.places_nearby(
+            location=(lat, lng),
+            radius=radius,
+            keyword=keyword,
+            language="ja"
+        ).get("results", [])
+
+        for place in results:
+            rating = place.get("rating", 0)
+            name = place.get("name")
+            place_lat = place["geometry"]["location"]["lat"]
+            place_lng = place["geometry"]["location"]["lng"]
+            distance = haversine(lat, lng, place_lat, place_lng)
+            if rating >= 3.5 and distance <= radius:
+                found_places.append({
+                    "name": name,
+                    "rating": rating,
+                    "keyword": keyword,
+                    "latitude": place_lat,
+                    "longitude": place_lng,
+                    "maps_url": f"https://www.google.com/maps/place/?q=place_id:{place['place_id']}"
+                })
+    return found_places
 
 def get_restaurants_by_sauna(sauna_id: int) -> List[Dict]:
     return [r for r in restaurants if r["sauna_id"] == sauna_id]
@@ -321,10 +370,14 @@ st.markdown('</div>', unsafe_allow_html=True)
 
 # 結果表示
 if st.session_state.selected_menus:
+    lat = selected_sauna.get("latitude")
+    lng = selected_sauna.get("longitude")
+
     st.markdown('<div class="separator"></div>', unsafe_allow_html=True)
     st.markdown('<h2 style="color: #e8d0a9; text-align: center; margin-bottom: 20px;">サ飯ガチャ 結果</h2>', unsafe_allow_html=True)
 
     for menu in st.session_state.selected_menus:
+        icon = category_icon.get(menu.get("category", "").lower(), "🍽️")
         tags_html = ''.join([f'<span class="tag">#{t}</span>' for t in get_tags_for_menu_item(menu['id'])])
         image_path = f"images/{menu.get('image_file', '')}"
         if image_path and os.path.exists(image_path):
@@ -338,7 +391,7 @@ if st.session_state.selected_menus:
         <div class="result-card">
             <div style="display: flex; align-items: flex-start; justify-content: space-between;">
                 <div style="flex: 1;">
-                    <p class="menu-name">🍽️ {menu['name']}</p>
+                    <p class="menu-name">{icon} {menu['name']}</p>
                     <p class="price">￥{menu['price']}</p>
                     <p class="description">{menu['description']}</p>
                     <div class="tags">{tags_html}</div>
@@ -371,6 +424,99 @@ if st.session_state.selected_menus:
         all_menus = get_all_menu_items_for_sauna(st.session_state.selected_sauna_id)
         st.session_state.selected_menus = get_random_menus_by_category(all_menus)
     st.markdown('</div>', unsafe_allow_html=True)
+    if lat and lng:
+        nearby_foods = find_nearby_good_food(lat, lng)
+        if nearby_foods:
+            st.markdown('<h2 style="color: #e8d0a9; text-align: center; margin-bottom: 20px;">徒歩圏内の高評価なサ飯処</h2>', unsafe_allow_html=True)
+            # 地図表示
+            map_data = pd.DataFrame(
+                [{
+                    'lat': lat,
+                    'lon': lng,
+                    'name': 'サウナ',
+                    'type': 'サウナ',
+                    'rating': None,
+                    'color': [0, 128, 255]
+                }] +
+                [{
+                    'lat': place['latitude'],
+                    'lon': place['longitude'],
+                    'name': place['name'],
+                    'type': place['keyword'],
+                    'rating': place['rating'],
+                    'color': [255, 0, 80]
+                } for place in nearby_foods]
+            )
+
+            # 絵文字マッピング（ローカル画像パス）
+            icon_map = {
+                "サウナ": "images/pin_sauna.png",
+                "カレー": "images/pin_curry.png",
+                "ラーメン": "images/pin_ramen.png",
+                "牛丼": "images/pin_gyudon.png",
+                "ハンバーガー": "images/pin_burger.png"
+            }
+            
+            # フォールバックアイコン（URLアイコンでも可）
+            default_icon_url = "https://cdn-icons-png.flaticon.com/512/684/684908.png"
+            
+            # ローカル画像をbase64エンコードして使用する関数
+            def get_icon_data(entry):
+                icon_path = icon_map.get(entry['type'], default_icon_url)
+                if os.path.exists(icon_path):
+                    with open(icon_path, "rb") as f:
+                        image_data = base64.b64encode(f.read()).decode()
+                    return {
+                        "url": f"data:image/png;base64,{image_data}",
+                    "width": 40,
+                    "height": 40,
+                    "anchorY": 40
+                    }
+                else:
+                    return {
+                        "url": default_icon_url,
+                    "width": 40,
+                    "height": 40,
+                    "anchorY": 40
+                    }
+            
+            map_data["icon_data"] = map_data.apply(get_icon_data, axis=1)
+            
+            layer = pdk.Layer(
+                "IconLayer",
+                data=map_data,
+                get_icon="icon_data",
+                get_size=4,
+                size_scale=15,
+                get_position='[lon, lat]',
+                pickable=True
+            )
+
+            tooltip = {
+                "html": "<b>{name}</b><br>{type}<br>評価: {rating}",
+                "style": {"backgroundColor": "white", "color": "black"}
+            }
+
+            view_state = pdk.ViewState(latitude=lat, longitude=lng, zoom=16)
+            st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip=tooltip, map_style="mapbox://styles/mapbox/light-v9"))
+            emoji_map = {
+                "ラーメン": "🍜",
+                "カレー": "🍛",
+                "牛丼": "🥩",
+                "ハンバーガー": "🍔"
+            }
+            for store in nearby_foods:
+                emoji = emoji_map.get(store['keyword'], "🍴")
+                stars = "⭐" * int(round(store['rating']))
+                st.markdown(f"""
+                <div class="result-card">
+                    <p class="menu-name">{emoji} {store['name']}（{store['keyword']}）</p>
+                    <p class="price">評価: {store['rating']} {stars}</p>
+                    <a href="{store['maps_url']}" target="_blank" style="color:#e8d0a9;">Googleマップで見る</a>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.markdown("😢 該当エリアに評価3.5以上のお店が見つかりませんでした。", unsafe_allow_html=True)
 
 # フッター
 st.markdown("""
