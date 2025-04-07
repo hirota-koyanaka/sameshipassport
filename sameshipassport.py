@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 import random
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -325,16 +326,24 @@ if st.session_state.selected_menus:
 
     for menu in st.session_state.selected_menus:
         tags_html = ''.join([f'<span class="tag">#{t}</span>' for t in get_tags_for_menu_item(menu['id'])])
+        image_path = f"images/{menu.get('image_file', '')}"
+        if image_path and os.path.exists(image_path):
+            with open(image_path, "rb") as img_file:
+                encoded = base64.b64encode(img_file.read()).decode()
+            image_html = f'<img src="data:image/jpeg;base64,{encoded}" style="width:150px; height:150px; object-fit: cover; border-radius:8px; margin-left:20px;" />'
+        else:
+            image_html = ""
         
         st.markdown(f"""
         <div class="result-card">
-            <div style="display: flex; align-items: center;">
+            <div style="display: flex; align-items: flex-start; justify-content: space-between;">
                 <div style="flex: 1;">
                     <p class="menu-name">🍽️ {menu['name']}</p>
                     <p class="price">￥{menu['price']}</p>
                     <p class="description">{menu['description']}</p>
                     <div class="tags">{tags_html}</div>
                 </div>
+                {image_html}
             </div>
         </div>
         """, unsafe_allow_html=True)
