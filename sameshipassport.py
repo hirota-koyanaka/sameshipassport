@@ -31,6 +31,8 @@ def load_sheet_as_df(sheet_id: str, sheet_name: str, _creds) -> pd.DataFrame:
     return df
 
 saunas_df = load_sheet_as_df(SHEET_ID, "Saunas", creds)
+saunas_df = saunas_df.dropna(subset=["name"])
+saunas_df = saunas_df[saunas_df["name"].str.strip() != ""]
 restaurants_df = load_sheet_as_df(SHEET_ID, "Restaurants", creds)
 menu_items_df = load_sheet_as_df(SHEET_ID, "Menu", creds)
 tags_df = load_sheet_as_df(SHEET_ID, "MenuTags", creds)
@@ -303,7 +305,7 @@ st.markdown('</div>', unsafe_allow_html=True)
 # 結果表示
 if st.session_state.selected_menus:
     st.markdown('<div class="separator"></div>', unsafe_allow_html=True)
-    st.markdown('<h2 style="color: #e8d0a9; text-align: center; margin-bottom: 20px;">サウナ飯ガチャ 結果</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color: #e8d0a9; text-align: center; margin-bottom: 20px;">サ飯ガチャ 結果</h2>', unsafe_allow_html=True)
 
     for menu in st.session_state.selected_menus:
         tags_html = ''.join([f'<span class="tag">#{t}</span>' for t in get_tags_for_menu_item(menu['id'])])
@@ -348,7 +350,7 @@ if st.session_state.selected_menus:
 # フッター
 st.markdown("""
 <div class="footer">
-    <p>このサイトについて</p>
+    <p>このサイトは、有志により開発された非公式ファンサイトです。<br>メニューは実際の取扱と異なることがあります。</p>
 </div>
 """, unsafe_allow_html=True)
 
