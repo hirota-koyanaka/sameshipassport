@@ -321,13 +321,18 @@ if st.session_state.selected_menus:
         </div>
         """, unsafe_allow_html=True)
 
+    raw_price = selected_sauna.get("entry_fee") or selected_sauna.get("entryfee") or selected_sauna.get("price", 0)
+    try:
+        sauna_fee = int(str(raw_price).replace(',', ''))
+    except ValueError:
+        sauna_fee = 0
     total_food_price = sum(menu['price'] for menu in st.session_state.selected_menus)
-    total_price = selected_sauna.get('entry_fee', selected_sauna.get('entryfee', 0)) + total_food_price
+    total_price = sauna_fee + total_food_price
 
     st.markdown(f"""
     <div class="price-summary">
         <h3 style="color: #e8d0a9; margin-bottom: 15px;">💰 合計金額</h3>
-        <p style="color: #e8d0a9; font-size: 16px;">サウナ入浴料: ￥{selected_sauna.get('entry_fee', selected_sauna.get('entryfee', 0))}</p>
+        <p style="color: #e8d0a9; font-size: 16px;">サウナ入浴料: ￥{sauna_fee}</p>
         <p style="color: #e8d0a9; font-size: 16px;">サウナ飯（{len(st.session_state.selected_menus)}品合計）: ￥{total_food_price}</p>
         <p style="color: #e8d0a9; font-size: 20px; font-weight: bold; margin-top: 10px;">合計: ￥{total_price}</p>
     </div>
