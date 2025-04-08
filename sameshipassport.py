@@ -86,13 +86,19 @@ def find_nearby_good_food(lat, lng, radius=200):
             place_lng = place["geometry"]["location"]["lng"]
             distance = haversine(lat, lng, place_lat, place_lng)
             if rating >= 3.5 and distance <= radius:
+                photo_ref = None
+                if "photos" in place and place["photos"]:
+                    photo_ref = place["photos"][0]["photo_reference"]
+                photo_url = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference={photo_ref}&key={os.getenv('GOOGLE_API_KEY')}" if photo_ref else None
+
                 found_places.append({
                     "name": name,
                     "rating": rating,
                     "keyword": keyword,
                     "latitude": place_lat,
                     "longitude": place_lng,
-                    "maps_url": f"https://www.google.com/maps/place/?q=place_id:{place['place_id']}"
+                    "maps_url": f"https://www.google.com/maps/place/?q=place_id:{place['place_id']}",
+                    "photo_url": photo_url
                 })
     return found_places
 
@@ -128,6 +134,18 @@ def get_random_menus_by_category(menu_items: List[Dict]) -> List[Dict]:
         selected.extend(drinks)  # 1品しかない場合はその1品だけ
 
     return selected
+
+# ------------------ ユーティリティ関数: get_photo_base64 ------------------
+import requests
+
+def get_photo_base64(photo_url):
+    try:
+        response = requests.get(photo_url)
+        if response.status_code == 200:
+            return base64.b64encode(response.content).decode()
+    except Exception:
+        return None
+    return None
 
 # ------------------ Streamlit UI ------------------
 # ロゴ（同フォルダ内の画像をbase64化）
@@ -508,13 +526,23 @@ if st.session_state.selected_menus:
             for store in nearby_foods:
                 emoji = emoji_map.get(store['keyword'], "🍴")
                 stars = "⭐" * int(round(store['rating']))
+                photo_base64 = get_photo_base64(store["photo_url"]) if store.get("photo_url") else None
+                if photo_base64:
+                    image_html = f'<img src="data:image/jpeg;base64,{photo_base64}" style="width:150px; height:150px; object-fit: cover; border-radius:8px; margin-left:20px;" />'
+                else:
+                    image_html = '<div style="width:150px; height:150px; background:#444; border-radius:8px; margin-left:20px;"></div>'
                 st.markdown(f"""
-                <div class="result-card">
-                    <p class="menu-name">{emoji} {store['name']}（{store['keyword']}）</p>
-                    <p class="price">評価: {store['rating']} {stars}</p>
-                    <a href="{store['maps_url']}" target="_blank" style="color:#e8d0a9;">Googleマップで見る</a>
-                </div>
-                """, unsafe_allow_html=True)
+<div class="result-card">
+    <div style="display: flex; align-items: flex-start; justify-content: space-between;">
+        <div style="flex: 1;">
+            <p class="menu-name">{emoji} {store['name']}（{store['keyword']}）</p>
+            <p class="price">評価: {store['rating']} {stars}</p>
+            <a href="{store['maps_url']}" target="_blank" style="color:#e8d0a9;">Googleマップで見る</a>
+        </div>
+        {image_html}
+    </div>
+</div>
+""", unsafe_allow_html=True)
         else:
             st.markdown("😢 該当エリアに評価3.5以上のお店が見つかりませんでした。", unsafe_allow_html=True)
 
