@@ -8,10 +8,16 @@ from typing import List, Dict  # これを追加
 import time
 import base64
 import googlemaps
-from dotenv import load_dotenv
+## from dotenv import load_dotenv  # Removed .env loading
 import pydeck as pdk
-load_dotenv()
-gmaps = googlemaps.Client(key=os.getenv("GOOGLE_API_KEY"))
+## load_dotenv()
+## gmaps = googlemaps.Client(key=os.getenv("GOOGLE_API_KEY"))
+scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
+creds = ServiceAccountCredentials.from_json_keyfile_dict(
+    st.secrets["gcp_service_account"],
+    scope
+)
+gmaps = googlemaps.Client(key=st.secrets["env"]["GOOGLE_API_KEY"])
 
 st.set_page_config(
     page_title="サ飯パスポート", 
@@ -20,8 +26,7 @@ st.set_page_config(
 )
 
 # --- 認証 ---
-scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
-creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+# Using st.secrets for credentials (already set above)
 
 # --- シートID ---
 SHEET_ID = "1c1WDtrWXvDyTVis_1wzyVzkWf2Hq7SxRKuGkrdN3K4M"
@@ -465,6 +470,7 @@ if st.session_state.selected_menus:
                     'color': [255, 0, 80]
                 } for place in nearby_foods]
             )
+            map_data['rating'] = map_data['rating'].fillna(0)
 
             # 絵文字マッピング（ローカル画像パス）
             icon_map = {

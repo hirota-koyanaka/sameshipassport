@@ -24,3 +24,4 @@ env/
 credentials.json
 
 # その他、不要なファイル・ディレクトリがあればここに追加
+secrets.toml
